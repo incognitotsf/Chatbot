@@ -119,7 +119,8 @@ textarea:focus{outline:none}
 const $ = id => document.getElementById(id);
 const log = $("log"), input = $("input"), send = $("send");
 const isLocalHost = ["localhost","127.0.0.1",""].includes(location.hostname);
-let API = isLocalHost ? "" : (localStorage.getItem("api") || "");
+const openedFromFile = location.protocol === "file:";
+let API = openedFromFile ? "http://127.0.0.1:8000" : isLocalHost ? "" : (localStorage.getItem("api") || "");
 let search = true, busy = false;
 if (!isLocalHost) $("serverBtn").hidden = false;
 $("serverBtn").onclick = () => {
