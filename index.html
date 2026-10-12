@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>ChatBot · Groq + live web search</title>
+<meta name="description" content="A liquid glass AI chatbot powered by Groq with DuckDuckGo web search.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@500;700&family=Figtree:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.6/purify.min.js"></script>
+<style>
+:root{
+  --ink:#f5f7ff; --ink-dim:rgba(245,247,255,.68);
+  --glass:rgba(255,255,255,.10); --glass-strong:rgba(255,255,255,.18);
+  --edge:rgba(255,255,255,.38); --edge-soft:rgba(255,255,255,.12);
+  --accent:#8fd3ff;
+  --mx:50%; --my:0%;
+}
+*{box-sizing:border-box;margin:0}
+html,body{height:100%}
+body{
+  font-family:"Figtree",system-ui,sans-serif; color:var(--ink);
+  background:#0a1030; overflow:hidden;
+  padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom);
+}
+
+/* Colour field behind the glass: this is what the glass refracts */
+.field{position:fixed;inset:0;z-index:0;overflow:hidden;background:linear-gradient(160deg,#0b1240,#1b0f3d 60%,#0a2a3d)}
+.blob{position:absolute;border-radius:50%;filter:blur(40px);opacity:.9;animation:drift 22s ease-in-out infinite alternate}
+.b1{width:46vmax;height:46vmax;left:-12vmax;top:-10vmax;background:radial-gradient(circle,#ff5fa2,transparent 65%)}
+.b2{width:42vmax;height:42vmax;right:-10vmax;top:18vh;background:radial-gradient(circle,#38c8ff,transparent 65%);animation-duration:27s}
+.b3{width:38vmax;height:38vmax;left:20vw;bottom:-16vmax;background:radial-gradient(circle,#ffb347,transparent 65%);animation-duration:31s}
+@keyframes drift{to{transform:translate(8vmax,-6vmax) scale(1.15)}}
+
+.shell{position:relative;z-index:1;height:100%;max-width:780px;margin:0 auto;padding:14px;display:flex;flex-direction:column;gap:12px}
+
+/* Liquid glass material */
+.glass{
+  position:relative;
+  background:linear-gradient(135deg,rgba(255,255,255,.22),rgba(255,255,255,.06) 45%,rgba(255,255,255,.12));
+  backdrop-filter:blur(22px) saturate(190%) brightness(1.08);
+  -webkit-backdrop-filter:blur(22px) saturate(190%) brightness(1.08);
+  border:1px solid var(--edge-soft);
+  box-shadow:
+    inset 0 1.5px 1px rgba(255,255,255,.55),
+    inset 0 -1.5px 1px rgba(255,255,255,.12),
+    inset 0 0 22px rgba(255,255,255,.07),
+    0 18px 40px -12px rgba(0,0,10,.45);
+}
+.glass::before{ /* light that follows the pointer */
+  content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;
+  background:radial-gradient(260px circle at var(--mx) var(--my),rgba(255,255,255,.28),transparent 60%);
+  mix-blend-mode:soft-light;
+}
+
+header{display:flex;align-items:center;gap:10px;padding:10px 12px 10px 18px;border-radius:26px;flex-wrap:wrap}
+h1{font-family:"Bricolage Grotesque",sans-serif;font-weight:700;font-size:1.25rem;letter-spacing:-.01em;margin-right:auto}
+.chip,.icon{border:1px solid var(--edge-soft);background:var(--glass);color:var(--ink);font:inherit;font-size:.85rem;font-weight:500;border-radius:999px;padding:8px 14px;cursor:pointer;transition:background .2s}
+.provider-label{cursor:default}
+.chip[aria-pressed=true]{background:rgba(143,211,255,.3);border-color:rgba(143,211,255,.7)}
+.chip:hover,.icon:hover{background:var(--glass-strong)}
+button:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+main{flex:1;min-height:0;overflow-y:auto;border-radius:30px;padding:18px 16px;display:flex;flex-direction:column;gap:14px;scroll-behavior:smooth}
+main::-webkit-scrollbar{width:0}
+.empty{margin:auto;text-align:center;max-width:30ch;color:var(--ink-dim);line-height:1.5}
+.empty b{display:block;font-family:"Bricolage Grotesque",sans-serif;font-size:1.5rem;color:var(--ink);margin-bottom:6px}
+
+.msg{max-width:88%;padding:11px 15px;border-radius:22px;line-height:1.55;font-size:.97rem;overflow-wrap:anywhere}
+.msg.user{align-self:flex-end;background:linear-gradient(135deg,rgba(143,211,255,.45),rgba(143,211,255,.22));border:1px solid rgba(255,255,255,.35);border-bottom-right-radius:8px}
+.msg.bot{align-self:flex-start;background:rgba(255,255,255,.10);border:1px solid var(--edge-soft);border-bottom-left-radius:8px}
+.msg p+p,.msg ul,.msg ol,.msg pre{margin-top:.6em}
+.msg ul,.msg ol{padding-left:1.3em}
+.msg a{color:var(--accent)}
+.msg code{font-family:ui-monospace,Menlo,monospace;font-size:.88em;background:rgba(0,0,0,.25);padding:1px 5px;border-radius:6px}
+.msg pre{background:rgba(0,0,0,.3);padding:10px 12px;border-radius:14px;overflow-x:auto}
+.msg pre code{background:none;padding:0}
+.typing::after{content:"";display:inline-block;width:8px;height:8px;margin-left:4px;border-radius:50%;background:var(--accent);animation:pulse 1s infinite}
+@keyframes pulse{50%{opacity:.2;transform:scale(.7)}}
+
+form{display:flex;align-items:flex-end;gap:8px;padding:8px 8px 8px 18px;border-radius:30px}
+textarea{flex:1;resize:none;max-height:140px;border:0;background:none;color:var(--ink);font:inherit;font-size:1rem;padding:9px 0;line-height:1.4}
+textarea::placeholder{color:var(--ink-dim)}
+textarea:focus{outline:none}
+.send{flex:none;width:44px;height:44px;border-radius:50%;border:0;cursor:pointer;color:#0a1030;background:linear-gradient(180deg,#fff,#cfe4ff);box-shadow:0 4px 14px rgba(0,0,0,.3),inset 0 1px 0 #fff;display:grid;place-items:center;transition:transform .15s}
+.send:active{transform:scale(.92)}
+.send:disabled{opacity:.5}
+
+@media (prefers-reduced-motion:reduce){.blob{animation:none}.typing::after{animation:none}main{scroll-behavior:auto}}
+@media (max-width:520px){.shell{padding:10px;gap:10px}.msg{max-width:94%}}
+</style>
+</head>
+<body>
+<div class="field"><div class="blob b1"></div><div class="blob b2"></div><div class="blob b3"></div></div>
+
+<div class="shell">
+  <header class="glass">
+    <h1>ChatBot</h1>
+    <span class="chip provider-label">Groq</span>
+    <button class="chip" id="serverBtn" hidden>Server</button>
+    <button class="chip" id="searchBtn" aria-pressed="true">Web search</button>
+    <button class="icon" id="newBtn" aria-label="New chat">New</button>
+  </header>
+
+  <main id="log" class="glass" aria-live="polite">
+    <div class="empty" id="empty"><b>Ask anything</b>Groq with live web search when you need the latest.</div>
+  </main>
+
+  <form id="form" class="glass">
+    <textarea id="input" rows="1" placeholder="Message" aria-label="Message"></textarea>
+    <button class="send" id="send" aria-label="Send">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+    </button>
+  </form>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const log = $("log"), input = $("input"), send = $("send");
+const isLocalHost = ["localhost","127.0.0.1",""].includes(location.hostname);
+let API = isLocalHost ? "" : (localStorage.getItem("api") || "");
+let search = true, busy = false;
+if (!isLocalHost) $("serverBtn").hidden = false;
+$("serverBtn").onclick = () => {
+  const v = prompt("Backend URL (e.g. https://your-app.onrender.com)", API);
+  if (v !== null) { API = v.trim().replace(/\/$/, ""); localStorage.setItem("api", API); }
+};
+
+// pointer-follow light on glass surfaces
+document.addEventListener("pointermove", e => {
+  document.querySelectorAll(".glass").forEach(el => {
+    const r = el.getBoundingClientRect();
+    el.style.setProperty("--mx", (e.clientX - r.left) + "px");
+    el.style.setProperty("--my", (e.clientY - r.top) + "px");
+  });
+});
+
+$("searchBtn").onclick = e => { search = !search; e.currentTarget.setAttribute("aria-pressed", search); };
+$("newBtn").onclick = async () => {
+  await fetch(API + "/api/reset", {method:"POST"});
+  log.innerHTML = '<div class="empty" id="empty"><b>Ask anything</b>Groq with live web search when you need the latest.</div>';
+};
+
+function render(el, text){
+  if (window.marked && window.DOMPurify) el.innerHTML = DOMPurify.sanitize(marked.parse(text));
+  else el.textContent = text;
+}
+function add(cls, text){
+  $("empty")?.remove();
+  const d = document.createElement("div");
+  d.className = "msg " + cls;
+  if (text) render(d, text);
+  log.appendChild(d); log.scrollTop = log.scrollHeight;
+  return d;
+}
+
+input.addEventListener("input", () => { input.style.height = "auto"; input.style.height = input.scrollHeight + "px"; });
+input.addEventListener("keydown", e => { if (e.key === "Enter" && !e.shiftKey){ e.preventDefault(); $("form").requestSubmit(); } });
+
+$("form").addEventListener("submit", async e => {
+  e.preventDefault();
+  const text = input.value.trim();
+  if (!text || busy) return;
+  busy = true; send.disabled = true;
+  input.value = ""; input.style.height = "auto";
+  add("user", text).textContent = text;
+  const bot = add("bot"); bot.classList.add("typing");
+  let full = "";
+  if (!isLocalHost && !API){ render(bot, "Set your backend first: tap **Server** and paste its URL."); bot.classList.remove("typing"); busy = false; send.disabled = false; return; }
+  try{
+    const res = await fetch(API + "/api/chat", {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({message:text, search})
+    });
+    const reader = res.body.getReader(), dec = new TextDecoder();
+    while (true){
+      const {value, done} = await reader.read();
+      if (done) break;
+      full += dec.decode(value, {stream:true});
+      render(bot, full); log.scrollTop = log.scrollHeight;
+    }
+  }catch(err){ render(bot, "Could not reach the server. Check that it is running."); }
+  bot.classList.remove("typing");
+  busy = false; send.disabled = false; input.focus();
+});
+</script>
+</body>
+</html>
