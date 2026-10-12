@@ -4,3 +4,4 @@ python-dotenv
 phidata
 duckduckgo-search
 groq
+streamlit
