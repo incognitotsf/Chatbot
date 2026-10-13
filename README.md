@@ -16,3 +16,6 @@ Set `GROQ_API_KEY` in a local `.env` file before starting the server.
 - Open the Pages site, tap **Server**, and paste your Render URL.
 
 Never commit `.env`.
+
+
+https://chatbot-l5kn8xso6cmzzcuasdka24.streamlit.app/
